@@ -1,0 +1,959 @@
+################################################################# 
+## Mod Title: read tracking 
+## Mod Version: 1.0.0 
+## Author: brookman 
+## Description:  
+## 
+## This mod changes the function of the "new post" history tracking 
+## from a "per session" to session independent. 
+## 
+## The function of the mod is as follows: 
+## * When you post a new topic or reply that thread will show up as 
+##   new to everyone that has access to that forum EXCEPT YOU. You 
+##   wrote it, and so I figured you didn't need to mark it as unread 
+##   to you. 
+## * When you read a thread it is removed from your "unread" list. 
+## * When you edit a message, it is again marked as new to everyone but you. 
+## * When you move a topic, the topic is marked as new to everyone but you. 
+##   If you leave a shadow topic, it is not marked as new. 
+## * When you split a topic, the part split off is marked as new to 
+##   everyone but you. The portion remaining is not marked as new. 
+## * Polls are marked as new if someone replies, not if someone votes. 
+## * Mark all as read clears your entire "unread" list. 
+## * Mark all topics read clears your "unread" list for just that forum. 
+## * Moving a user to in-active deletes his/her "unread" list 
+## * Deleting a forum or topic removes that forum or topic's contents 
+##   from everyone's "unread" list. 
+## * View all unread topics (notice the verbiage change) does just 
+##   that...it shows you every topic you haven&#8217;t read. 
+## * Clicking on the orange folder beside the topic (with the little arrow), 
+##   opens the topic to the first new post you haven&#8217;t read. I have made it 
+##   so I can just go to View all unread, go to each topic&#8217;s orange folder, 
+##   and read down to the end. I then added the &#8220;View all unread&#8221; at the 
+##   bottom of the last thread to go to the next topic. 
+## 
+## 
+## Installation Level:  (moderate) 
+## Installation Time:  15-20 Minutes 
+## 
+## Files To Edit:         10 
+##                   - index.php 
+##                   - modcp.php 
+##                   - posting.php 
+##                   - search.php 
+##                   - viewforum.php 
+##                   - viewtopic.php 
+##                   - admin/admin_forums.php 
+##                   - admin/admin_users.php 
+##                   - includes/functions_post.php 
+##                   - includes/prune.php 
+## 
+## Included Files:     includes/read_history.php 
+################################################################# 
+## Security Disclaimer: This MOD Cannot Be Posted To Or Added At Any Non-Official phpBB Sites 
+################################################################# 
+## 
+## Author Note: 
+## 
+##   Database table names are hard coded into the mod!!!  If your 
+##    tables begin with a prefix OTHER THAN phpbb_. . . then you must 
+##    change the mod code to match.  IN ADDITION, open and edit the 
+##    table names in includes/read_history.php 
+## 
+##    This mod IS compatable with version 2.0.3 of phpBB 
+## 
+## 
+##    (the phpBB Group Reserves The Right To Remove/Edit Author Notes, Should It Be Warranted) 
+## 
+################################################################# 
+##    Before Adding This MOD To Your Forum, You Should Back Up All Files Related To This MOD 
+################################################################# 
+
+# 
+#-----[ ADD SQL ]------------------------------------------ 
+# 
+
+ALTER TABLE phpbb_users ADD user_onhold tinyint(1) NOT NULL default '0' 
+
+# 
+#-----[ ADD SQL ]------------------------------------------ 
+# 
+
+CREATE TABLE phpbb_read_history 
+( 
+    user_id mediumint(8) NOT NULL default '0', 
+    forum_id smallint(5) unsigned NOT NULL default '0', 
+    topic_id mediumint(8) unsigned NOT NULL default '0', 
+    post_time int(11) NOT NULL default '0' 
+    PRIMARY KEY (user_id, forum_id, topic_id), 
+    KEY user_id (user_id), 
+    KEY forum_id (forum_id), 
+    KEY topic_id (topic_id) 
+) TYPE=MyISAM; 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+index.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+include($phpbb_root_path . 'extension.inc'); 
+include($phpbb_root_path . 'common.'.$phpEx); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//Added for read_tracking 
+include($phpbb_root_path . 'includes/read_history.php'); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+      setcookie($board_config['cookie_name'] . '_f_all', time(), 0, $board_config['cookie_path'], $board_config['cookie_domain'], $board_config['cookie_secure']); 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//Replaced for read_tracking 
+      smart_mark_all_read(); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+$tracking_topics = ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . "_t"]) : array(); 
+$tracking_forums = ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . "_f"]) : array(); 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//Removed for read_tracking 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+   // 
+   // Obtain a list of topic ids which contain 
+   // posts made since user last visited 
+   // 
+   if ( $userdata['session_logged_in'] ) 
+   { 
+      $sql = "SELECT t.forum_id, t.topic_id, p.post_time 
+         FROM " . TOPICS_TABLE . " t, " . POSTS_TABLE . " p 
+         WHERE p.post_id = t.topic_last_post_id 
+            AND p.post_time > " . $userdata['user_lastvisit'] . " 
+            AND t.topic_moved_id = 0"; 
+      if ( !($result = $db->sql_query($sql)) ) 
+      { 
+         message_die(GENERAL_ERROR, 'Could not query new topic information', '', __LINE__, __FILE__, $sql); 
+      } 
+
+      $new_topic_data = array(); 
+      while( $topic_data = $db->sql_fetchrow($result) ) 
+      { 
+         $new_topic_data[$topic_data['forum_id']][$topic_data['topic_id']] = $topic_data['post_time']; 
+      } 
+   } 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//Section Removed for read_tracking 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+                        $unread_topics = false; 
+                        if ( $userdata['session_logged_in'] ) 
+                        { 
+                           if ( !empty($new_topic_data[$forum_id]) ) 
+                           { 
+                              $forum_last_post_time = 0; 
+
+                              while( list($check_topic_id, $check_post_time) = @each($new_topic_data[$forum_id]) ) 
+                              { 
+                                 if ( empty($tracking_topics[$check_topic_id]) ) 
+                                 { 
+                                    $unread_topics = true; 
+                                    $forum_last_post_time = max($check_post_time, $forum_last_post_time); 
+
+                                 } 
+                                 else 
+                                 { 
+                                    if ( $tracking_topics[$check_topic_id] < $check_post_time ) 
+                                    { 
+                                       $unread_topics = true; 
+                                       $forum_last_post_time = max($check_post_time, $forum_last_post_time); 
+                                    } 
+                                 } 
+                              } 
+
+                              if ( !empty($tracking_forums[$forum_id]) ) 
+                              { 
+                                 if ( $tracking_forums[$forum_id] > $forum_last_post_time ) 
+                                 { 
+                                    $unread_topics = false; 
+                                 } 
+                              } 
+
+                              if ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all']) ) 
+                              { 
+                                 if ( $HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all'] > $forum_last_post_time ) 
+                                 { 
+                                    $unread_topics = false; 
+                                 } 
+                              } 
+
+                           } 
+                        } 
+
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//Section Removed for read_tracking 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+                        $folder_image = ( $unread_topics ) ? $images['forum_new'] : $images['forum']; 
+                        $folder_alt = ( $unread_topics ) ? $lang['New_posts'] : $lang['No_new_posts']; 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//Replaced for read_tracking 
+                        $folder_image = ( smart_is_new_forum( $forum_id ) ) ? $images['forum_new'] : $images['forum']; 
+                        $folder_alt = ( smart_is_new_forum( $forum_id ) ) ? $lang['New_posts'] : $lang['No_new_posts']; 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+modcp.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+include($phpbb_root_path . 'includes/functions_admin.'.$phpEx); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//Added for read_tracking 
+include($phpbb_root_path . 'includes/read_history.php'); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+         if ( !$db->sql_query($sql, BEGIN_TRANSACTION) ) 
+         { 
+            message_die(GENERAL_ERROR, 'Could not delete topics', '', __LINE__, __FILE__, $sql); 
+         } 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+         // read_tracking add 
+         $sql = "DELETE FROM phpbb_read_history " 
+                . "WHERE topic_id IN ($topic_id_sql) "; 
+         if ( !$db->sql_query($sql, BEGIN_TRANSACTION) ) 
+         { 
+            message_die(GENERAL_ERROR, 'Could not delete topics', '', __LINE__, __FILE__, $sql); 
+         } 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+               if ( !$db->sql_query($sql) ) 
+               { 
+                  message_die(GENERAL_ERROR, 'Could not update old topic', '', __LINE__, __FILE__, $sql); 
+               } 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+               // read_history add 
+               $current_time = time(); 
+               smart_delete_topic( $topic_id ); 
+               smart_submit( $new_forum_id, $topic_id, $current_time ); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+         $new_topic_id = $db->sql_nextid(); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+         // read_tracking add 
+         $current_time = time(); 
+         smart_submit($new_forum_id, $new_topic_id, $current_time); 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+posting.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+include($phpbb_root_path . 'includes/bbcode.'.$phpEx); 
+include($phpbb_root_path . 'includes/functions_post.'.$phpEx); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+include($phpbb_root_path . 'includes/read_history.php'); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+            $topic_type = ( $topic_type != $post_data['topic_type'] && !$is_auth['auth_sticky'] && !$is_auth['auth_announce'] ) ? $post_data['topic_type'] : $topic_type; 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+            $current_time = time(); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+            submit_post($mode, $post_data, $return_message, $return_meta, $forum_id, $topic_id, $post_id, $poll_id, $topic_type, $bbcode_on, $html_on, $smilies_on, $attach_sig, $bbcode_uid, str_replace("\'", "''", $username), str_replace("\'", "''", $subject), str_replace("\'", "''", $message), str_replace("\'", "''", $poll_title), $poll_options, $poll_length); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+            smart_submit( $forum_id, $topic_id, $current_time ); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+      } 
+
+      if ( $mode == 'newtopic' || $mode == 'reply' ) 
+      { 
+         $tracking_topics = ( !empty($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) : array(); 
+         $tracking_forums = ( !empty($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) : array(); 
+
+         if ( count($tracking_topics) + count($tracking_forums) == 100 && empty($tracking_topics[$topic_id]) ) 
+         { 
+            asort($tracking_topics); 
+            unset($tracking_topics[key($tracking_topics)]); 
+         } 
+
+         $tracking_topics[$topic_id] = time(); 
+
+         setcookie($board_config['cookie_name'] . '_t', serialize($tracking_topics), 0, $board_config['cookie_path'], $board_config['cookie_domain'], $board_config['cookie_secure']); 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//removed for read_tracking 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+search.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+include($phpbb_root_path . 'includes/bbcode.'.$phpEx); 
+include($phpbb_root_path . 'includes/functions_search.'.$phpEx); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+
+// read_tracking add 
+include($phpbb_root_path . 'includes/read_history.php'); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+               $sql = "SELECT post_id 
+                  FROM " . POSTS_TABLE . " 
+                  WHERE post_time >= " . $userdata['user_lastvisit']; 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+               // read_tracking replace 
+               $sql = "SELECT p.post_id " 
+                      . "FROM " . POSTS_TABLE . " p, phpbb_read_history rh, " 
+                      . TOPICS_TABLE . " t " 
+                      . "WHERE p.post_id = t.topic_last_post_id AND " 
+                      . "t.topic_id = rh.topic_id AND " 
+                      . "rh.user_id = " . $userdata['user_id']; 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+                  if ( $searchset[$i]['post_time'] > $userdata['user_lastvisit'] ) 
+                  { 
+                     if ( !empty($tracking_topics) || !empty($tracking_forums) || isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all']) ) 
+                     { 
+
+                        $unread_topics = true; 
+
+                        if ( !empty($tracking_topics[$topic_id]) ) 
+                        { 
+                           if ( $tracking_topics[$topic_id] > $searchset[$i]['post_time'] ) 
+                           { 
+                              $unread_topics = false; 
+                           } 
+                        } 
+
+                        if ( !empty($tracking_forums[$forum_id]) ) 
+                        { 
+                           if ( $tracking_forums[$forum_id] > $searchset[$i]['post_time'] ) 
+                           { 
+                              $unread_topics = false; 
+                           } 
+                        } 
+
+                        if ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all']) ) 
+                        { 
+                           if ( $HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all'] > $searchset[$i]['post_time'] ) 
+                           { 
+                              $unread_topics = false; 
+                           } 
+                        } 
+
+                        if ( $unread_topics ) 
+                        { 
+                           $folder_image = $folder_new; 
+                           $folder_alt = $lang['New_posts']; 
+
+                           $newest_post_img = '<a href="' . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id&amp;view=newest") . '"><img src="' . $images['icon_newest_reply'] . '" alt="' . $lang['View_newest_post'] . '" title="' . $lang['View_newest_post'] . '" border="0" /></a> '; 
+                        } 
+                        else 
+                        { 
+                           $folder_alt = ( $searchset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+
+                           $folder_image = $folder; 
+                           $folder_alt = $folder_alt; 
+                           $newest_post_img = ''; 
+                        } 
+
+                     } 
+                     else if ( $searchset[$i]['post_time'] > $userdata['user_lastvisit'] ) 
+                     { 
+                        $folder_image = $folder_new; 
+                        $folder_alt = $lang['New_posts']; 
+
+                        $newest_post_img = '<a href="' . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id&amp;view=newest") . '"><img src="' . $images['icon_newest_reply'] . '" alt="' . $lang['View_newest_post'] . '" title="' . $lang['View_newest_post'] . '" border="0" /></a> '; 
+                     } 
+                     else 
+                     { 
+                        $folder_image = $folder; 
+                        $folder_alt = ( $searchset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+                        $newest_post_img = ''; 
+                     } 
+                  } 
+                  else 
+                  { 
+                     $folder_image = $folder; 
+                     $folder_alt = ( $searchset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+                     $newest_post_img = ''; 
+                  } 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+                  // read_tracking replace 
+                  if ( smart_is_new_topic( $topic_id ) ) 
+                  { 
+                     $folder_image = $folder_new; 
+                     $folder_alt = $lang['New_posts']; 
+
+                     $newest_post_img = '<a href="' . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id&amp;view=newest") . '"><img src="' . $images['icon_newest_reply'] . '" alt="' . $lang['View_newest_post'] . '" title="' . $lang['View_newest_post'] . '" border="0" /></a> '; 
+                  } 
+                  else 
+                  { 
+                     $folder_alt = ( $searchset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+
+                     $folder_image = $folder; 
+                     $folder_alt = $folder_alt; 
+                     $newest_post_img = ''; 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+viewforum.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+include($phpbb_root_path . 'extension.inc'); 
+include($phpbb_root_path . 'common.'.$phpEx); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+include($phpbb_root_path . 'includes/read_history.php'); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+      $sql = "SELECT MAX(post_time) AS last_post 
+         FROM " . POSTS_TABLE . " 
+         WHERE forum_id = $forum_id"; 
+      if ( !($result = $db->sql_query($sql)) ) 
+      { 
+         message_die(GENERAL_ERROR, 'Could not obtain forums information', '', __LINE__, __FILE__, $sql); 
+      } 
+
+      if ( $row = $db->sql_fetchrow($result) ) 
+      { 
+         $tracking_forums = ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) : array(); 
+         $tracking_topics = ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) : array(); 
+
+         if ( ( count($tracking_forums) + count($tracking_topics) ) >= 150 && empty($tracking_forums[$forum_id]) ) 
+         { 
+            asort($tracking_forums); 
+            unset($tracking_forums[key($tracking_forums)]); 
+         } 
+
+         if ( $row['last_post'] > $userdata['user_lastvisit'] ) 
+         { 
+            $tracking_forums[$forum_id] = time(); 
+
+            setcookie($board_config['cookie_name'] . '_f', serialize($tracking_forums), 0, $board_config['cookie_path'], $board_config['cookie_domain'], $board_config['cookie_secure']); 
+         } 
+      } 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//read_tracking add 
+      smart_mark_forum_read( $forum_id ); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+            if( $topic_rowset[$i]['post_time'] > $userdata['user_lastvisit'] ) 
+            { 
+               if( !empty($tracking_topics) || !empty($tracking_forums) || isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all']) ) 
+               { 
+                  $unread_topics = true; 
+
+                  if( !empty($tracking_topics[$topic_id]) ) 
+                  { 
+                     if( $tracking_topics[$topic_id] >= $topic_rowset[$i]['post_time'] ) 
+                     { 
+                        $unread_topics = false; 
+                     } 
+                  } 
+
+                  if( !empty($tracking_forums[$forum_id]) ) 
+                  { 
+                     if( $tracking_forums[$forum_id] >= $topic_rowset[$i]['post_time'] ) 
+                     { 
+                        $unread_topics = false; 
+                     } 
+                  } 
+
+                  if( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all']) ) 
+                  { 
+                     if( $HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f_all'] >= $topic_rowset[$i]['post_time'] ) 
+                     { 
+                        $unread_topics = false; 
+                     } 
+                  } 
+
+                  if( $unread_topics ) 
+                  { 
+                     $folder_image = $folder_new; 
+                     $folder_alt = $lang['New_posts']; 
+
+                     $newest_post_img = '<a href="' . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id&amp;view=newest") . '"><img src="' . $images['icon_newest_reply'] . '" alt="' . $lang['View_newest_post'] . '" title="' . $lang['View_newest_post'] . '" border="0" /></a> '; 
+                  } 
+                  else 
+                  { 
+                     $folder_image = $folder; 
+                     $folder_alt = ( $topic_rowset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+
+                     $newest_post_img = ''; 
+                  } 
+               } 
+               else 
+               { 
+                  $folder_image = $folder_new; 
+                  $folder_alt = ( $topic_rowset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['New_posts']; 
+
+                  $newest_post_img = '<a href="' . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id&amp;view=newest") . '"><img src="' . $images['icon_newest_reply'] . '" alt="' . $lang['View_newest_post'] . '" title="' . $lang['View_newest_post'] . '" border="0" /></a> '; 
+               } 
+            } 
+            else 
+            { 
+               $folder_image = $folder; 
+               $folder_alt = ( $topic_rowset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+
+               $newest_post_img = ''; 
+            } 
+         } 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//read_tracking replace 
+            if (smart_is_new_topic( $topic_id ) ) 
+            { 
+               //Keep if new 
+               $folder_image = $folder_new; 
+               $folder_alt = $lang['New_posts']; 
+
+               $newest_post_img = '<a href="' . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id&amp;view=newest") . '"><img src="' . $images['icon_newest_reply'] . '" alt="' . $lang['View_newest_post'] . '" title="' . $lang['View_newest_post'] . '" border="0" /></a> '; 
+            } 
+            else 
+            { 
+               $folder_image = $folder; 
+               $folder_alt = ( $topic_rowset[$i]['topic_status'] == TOPIC_LOCKED ) ? $lang['Topic_locked'] : $lang['No_new_posts']; 
+
+               $newest_post_img = ''; 
+            } 
+         } 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+viewtopic.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+include($phpbb_root_path . 'common.'.$phpEx); 
+include($phpbb_root_path . 'includes/bbcode.'.$phpEx); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+include($phpbb_root_path . 'includes/read_history.php'); 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+         if ( $session_id ) 
+         { 
+            $sql = "SELECT p.post_id 
+               FROM " . POSTS_TABLE . " p, " . SESSIONS_TABLE . " s,  " . USERS_TABLE . " u 
+               WHERE s.session_id = '$session_id' 
+                  AND u.user_id = s.session_user_id 
+                  AND p.topic_id = $topic_id 
+                  AND p.post_time >= u.user_lastvisit 
+               ORDER BY p.post_time ASC 
+               LIMIT 1"; 
+            if ( !($result = $db->sql_query($sql)) ) 
+            { 
+               message_die(GENERAL_ERROR, 'Could not obtain newer/older topic information', '', __LINE__, __FILE__, $sql); 
+            } 
+
+            if ( !($row = $db->sql_fetchrow($result)) ) 
+            { 
+               message_die(GENERAL_MESSAGE, 'No_new_posts_last_visit'); 
+            } 
+
+            $post_id = $row['post_id']; 
+            header($header_location . append_sid("viewtopic.$phpEx?" . POST_POST_URL . "=$post_id#$post_id", true)); 
+            exit; 
+         } 
+      } 
+
+      header($header_location . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id", true)); 
+      exit; 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//read_tracking replace 
+         if ( $session_id ) 
+         { 
+            $sql = "SELECT p.post_id " 
+                   . "FROM " . POSTS_TABLE . " p, phpbb_read_history rh, " 
+                   . SESSIONS_TABLE . " s " 
+                   . "WHERE s.session_id = '$session_id' " 
+                   . "AND s.session_user_id = rh.user_id " 
+                   . "AND rh.topic_id = $topic_id " 
+                   . "AND rh.topic_id = p.topic_id " 
+                   . "AND p.post_time >= rh.post_time " 
+                   . "ORDER BY p.post_time ASC " 
+                   . "LIMIT 1"; 
+
+            if ( !($result = $db->sql_query($sql)) ) 
+            { 
+               message_die(GENERAL_ERROR, $sql, '', __LINE__, __FILE__, $sql); 
+            } 
+
+            if ( !($row = $db->sql_fetchrow($result)) ) 
+            { 
+                 header($header_location . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL . "=$topic_id", true)); 
+               exit; 
+            } 
+    
+            $post_id = $row['post_id']; 
+            header($header_location . append_sid("viewtopic.$phpEx?" . POST_POST_URL . "=$post_id#$post_id", true)); 
+            exit; 
+         } 
+      } 
+      header($header_location . append_sid("viewtopic.$phpEx?" . POST_TOPIC_URL 
+. "=$topic_id", true)); 
+      exit; 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+// 
+// Set a cookie for this topic 
+// 
+if ( $userdata['session_logged_in'] ) 
+{ 
+   $tracking_topics = ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_t']) : array(); 
+   $tracking_forums = ( isset($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) ) ? unserialize($HTTP_COOKIE_VARS[$board_config['cookie_name'] . '_f']) : array(); 
+
+   if ( !empty($tracking_topics[$topic_id]) && !empty($tracking_forums[$forum_id]) ) 
+   { 
+      $topic_last_read = ( $tracking_topics[$topic_id] > $tracking_forums[$forum_id] ) ? $tracking_topics[$topic_id] : $tracking_forums[$forum_id]; 
+   } 
+   else if ( !empty($tracking_topics[$topic_id]) || !empty($tracking_forums[$forum_id]) ) 
+   { 
+      $topic_last_read = ( !empty($tracking_topics[$topic_id]) ) ? $tracking_topics[$topic_id] : $tracking_forums[$forum_id]; 
+   } 
+   else 
+   { 
+      $topic_last_read = $userdata['user_lastvisit']; 
+   } 
+
+   if ( count($tracking_topics) >= 150 && empty($tracking_topics[$topic_id]) ) 
+   { 
+      asort($tracking_topics); 
+      unset($tracking_topics[key($tracking_topics)]); 
+   } 
+
+   $tracking_topics[$topic_id] = time(); 
+
+   setcookie($board_config['cookie_name'] . '_t', serialize($tracking_topics), 0, $board_config['cookie_path'], $board_config['cookie_domain'], $board_config['cookie_secure']); 
+} 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+//removed for read_tracking 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+   // 
+   // Define the little post icon 
+   // 
+   if ( $userdata['session_logged_in'] && $postrow[$i]['post_time'] > $userdata['user_lastvisit'] && $postrow[$i]['post_time'] > $topic_last_read ) 
+
+# 
+#-----[ REPLACE WITH ]------------------------------------------ 
+# 
+
+   // 
+   // Define the little post icon 
+      // 
+   //  replace for read_tracking 
+   if ( smart_is_new_topic_post( $topic_id, $postrow[$i]['post_time']) ) 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+$template->pparse('body'); 
+
+include($phpbb_root_path . 'includes/page_tail.'.$phpEx); 
+
+?> 
+
+# 
+#-----[ BEFORE, ADD ]------------------------------------------ 
+# 
+//read_tracking add 
+smart_read_topic( $topic_id ); 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+admin/admin_forums.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+            { 
+               message_die(GENERAL_ERROR, "Couldn't move posts to other forum", "", __LINE__, __FILE__, $sql); 
+            } 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+            $sql = "UPDATE phpbb_read_history " 
+                   . "SET   forum_id = $to_id WHERE forum_id = $from_id"; 
+            if( !$result = $db->sql_query($sql) ) 
+            { 
+               message_die(GENERAL_ERROR, "Couldn't move read history for posts to other forum", "", __LINE__, __FILE__, $sql); 
+            } 
+             
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+admin/admin_users.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+      { 
+         $error = TRUE; 
+         $error_msg .= ( ( isset($error_msg) ) ? '<br />' : '' ) . $lang['Password_mismatch']; 
+      } 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+         $sql = "DELETE FROM phpbb_read_history  
+            WHERE user_id = $user_id"; 
+         if( !$db->sql_query($sql) ) 
+         { 
+            message_die(GENERAL_ERROR, 'Could not delete this users read history', '', __LINE__, __FILE__, $sql); 
+         } 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+            { 
+               message_die(GENERAL_ERROR, 'Could not delete user', '', __LINE__, __FILE__, $sql); 
+            } 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+            $sql = "DELETE FROM phpbb_read_history WHERE user_id = $user_id"; 
+            if( !$db->sql_query($sql) ) 
+            { 
+               message_die(GENERAL_ERROR, 'Could not delete users read history', '', __LINE__, __FILE__, $sql); 
+            } 
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+includes/functions_post.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+            { 
+               message_die(GENERAL_ERROR, 'Error in deleting post', '', __LINE__, __FILE__, $sql); 
+            } 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+//read_tracking add 
+            $sql = "DELETE FROM phpbb_read_history WHERE topic_id = $topic_id"; 
+            if ( !$db->sql_query($sql) ) 
+            { 
+               message_die(GENERAL_ERROR, 'Error in deleting read history for post', '', __LINE__, __FILE__, $sql); 
+            } 
+
+
+# 
+#-----[ OPEN ]------------------------------------------ 
+# 
+
+includes/prune.php 
+
+# 
+#-----[ FIND ]------------------------------------------ 
+# 
+
+         $pruned_topics = $db->sql_affectedrows(); 
+
+# 
+#-----[ AFTER, ADD ]------------------------------------------ 
+# 
+
+         $sql = "DELETE FROM phpbb_read_history " 
+                . "WHERE topic_id IN ($sql_topics)"; 
+         if ( !$db->sql_query($sql) ) 
+         { 
+            message_die(GENERAL_ERROR, 'Could not delete read history during prune', '', __LINE__, __FILE__, $sql); 
+         } 
+
+# 
+#-----[ SAVE/CLOSE ALL FILES ]------------------------------------------ 
+# 
+# EoM
